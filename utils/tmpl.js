@@ -101,7 +101,41 @@ $.tmpl = {
 
         "data-unwrap": function(elem) {
             return $(elem).contents();
+        },
+
+        "data-video-hint": function(elem) {
+            var youtubeIds = $(elem).data("youtube-id");
+            if (!youtubeIds) {
+                return;
+            }
+
+            youtubeIds = youtubeIds.split(/,\s*/);
+
+            var author = $(elem).data("video-hint-author") || "Sal";
+            var msg = "Watch " + author +
+                      " work through a very similar problem:";
+            var preface = $("<p>").text(msg);
+
+            var wrapper = $("<div>", { "class": "video-hint" });
+            wrapper.append(preface);
+
+            _.each(youtubeIds, function(youtubeId) {
+                var href = "http://www.khanacademy.org/embed_video?v=" +
+                            youtubeId;
+                var iframe = $("<iframe>").attr({
+                    "frameborder": "0",
+                    "scrolling": "no",
+                    "width": "100%",
+                    "height": "360px",
+                    "src": href
+                });
+
+                wrapper.append(iframe);
+            });
+
+            return wrapper;
         }
+
     },
 
     // Processors that act based on tag names
@@ -188,10 +222,20 @@ $.tmpl = {
 
                     // Stick the processing request onto the queue
                     if (typeof MathJax !== "undefined") {
+                        KhanUtil.debugLog("adding " + text + " to MathJax typeset queue");
                         MathJax.Hub.Queue(["Typeset", MathJax.Hub, elem]);
+                        MathJax.Hub.Queue(function() {
+                            KhanUtil.debugLog("MathJax done typesetting " + text);
+                        });
+                    } else {
+                        KhanUtil.debugLog("not adding " + text + " to queue because MathJax is undefined");
                     }
                 } else {
+                    KhanUtil.debugLog("reprocessing MathJax: " + text);
                     MathJax.Hub.Queue(["Reprocess", MathJax.Hub, elem]);
+                    MathJax.Hub.Queue(function() {
+                        KhanUtil.debugLog("MathJax done reprocessing " + text);
+                    });
                 }
             };
         }
@@ -288,13 +332,24 @@ $.fn.tmplCleanup = function() {
     // problem, MathJax isn't loaded yet. No worries--there's nothing to clean
     // up anyway
     if (typeof MathJax === "undefined") {
+        KhanUtil.debugLog("MathJax undefined in Cleanup");
         return;
     }
 
     this.find("code").each(function() {
+        KhanUtil.debugLog("cleaning up: " + $(this).text());
         var jax = MathJax.Hub.getJaxFor(this);
+        KhanUtil.debugLog("got jax of type " + $.type(jax));
         if (jax) {
+            var e = jax.SourceElement();
+            KhanUtil.debugLog("source element is type " + $.type(e));
+            if ("outerHTML" in e) {
+                KhanUtil.debugLog("source element " + e.outerHTML);
+            } else {
+                KhanUtil.debugLog("no source element");
+            }
             jax.Remove();
+            KhanUtil.debugLog("removed!");
         }
     });
 };
@@ -618,6 +673,16 @@ $.extend({
                 "(" + parentEnsure + ") && (" + childEnsure + ")");
 
             return $.tmplApplyMethods.appendContents.call(this, elem);
+        },
+
+        // Like prependContents but also merges the data-ensures
+        prependVars: function(elem) {
+            var parentEnsure = $(this).data("ensure") || "1";
+            var childEnsure = $(elem).data("ensure") || "1";
+            $(this).data("ensure",
+                "(" + childEnsure + ") && (" + parentEnsure + ")");
+
+            return $.tmplApplyMethods.prependContents.call(this, elem);
         }
     }
 });
